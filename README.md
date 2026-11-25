@@ -1,0 +1,51 @@
+# Quiz Race – Midterm Showdown (bản Rust)
+
+Game đố vui trên lớp kiểu Blooket. Máy chiếu chạy app này, học sinh vào bằng điện thoại.
+9 nhóm (1–10, bỏ nhóm 5), 3 phần × 5 câu, 20 giây mỗi câu. Phần 1 đua xe, phần 2 bơi, phần 3 leo núi.
+Viết lại từ bản Node.js `quiz-race.zip`: một file exe duy nhất, không cần Node, npm hay Internet.
+
+## Cài và chạy
+- Bấm đúp `QuizRace-2.0.0-win-x64-setup.exe` là xong: không có bước nào phải chọn, không cần quyền admin. Bộ cài tạo lối tắt Start menu và Desktop, cài xong tự mở game. Gỡ trong Settings → Apps.
+- **Lần đầu mở**, Windows hỏi tường lửa: bấm **Allow** cho mạng Private, nếu không thì điện thoại không vào được.
+- Học sinh quét QR trên màn hình (link `http://<IP máy>:3000`). Máy chiếu và điện thoại phải dùng chung Wi-Fi.
+- Nếu học sinh không chung Wi-Fi: chạy `npx cloudflared tunnel --url http://localhost:3000`, copy link https nó in ra, rồi bấm **Paste public link** trong lobby để QR dùng link đó.
+
+## Điều khiển (host)
+Space hoặc Enter là nút chính (Start → End question → Next…). M bật/tắt âm thanh, F11 bật/tắt toàn màn hình.
+Nút **Auto-advance** bật/tắt tự chuyển câu. Bấm ✕ trên ô nhóm hai lần để xoá nhóm. Bấm **Reset game** hai lần để xoá điểm (các nhóm vẫn ở lại).
+
+## Đổi câu hỏi
+Trong lobby bấm **Questions file…**: app tạo `%APPDATA%\Quiz Race\questions.json` (bản sao bộ câu hỏi gốc) và mở thư mục chứa nó.
+Sửa file xong thì bấm **Reset game** để nạp lại. Có thể đổi `title`, `question_seconds`, `teams` (tối đa 12 nhóm), số phần và số câu; mỗi câu có 2–4 đáp án, `answer` là số thứ tự của đáp án đúng, tính từ 0.
+Nếu file bị lỗi, app báo lỗi ở lobby và dùng bộ câu hỏi có sẵn.
+Cũng có thể mở một file khác: `QuizRace.exe đường\dẫn\quiz.json`.
+
+## So với bản gốc
+- Sửa lỗi QR: QR luôn chứa IP mạng LAN. Bản gốc ra `localhost` nếu mở host theo đúng hướng dẫn README.
+- Sửa lỗi chèn HTML: server chỉ nhận avatar có trong danh sách. Bản gốc cho phép người chơi gửi `<style>` làm vỡ màn hình mọi máy.
+- Host chạy ngay trên máy nên không còn mật khẩu mặc định "host" gửi qua mạng.
+- Bỏ các giá trị viết cứng "/15", "/9 teams", "3 phần": số câu, số phần, số nhóm lấy theo file câu hỏi.
+- Nhóm mất kết nối giữa câu không còn làm câu đó phải chờ hết giờ. Không thể rời nhóm giữa chừng làm mất điểm.
+- Thêm nhạc nền vui nhộn (hai bản: lobby và lúc làm bài), hiệu ứng âm thanh, chuyển cảnh trượt mờ, điểm bay lên trên làn đua, pháo giấy ở màn kết quả. Toàn bộ âm thanh được tổng hợp trong code, không dùng file nào.
+- Màu nền và thẻ là màu đặc, không gradient hay trong suốt (cả màn host lẫn trang điện thoại).
+- Font Be Vietnam Pro nhúng sẵn, hiện đủ dấu tiếng Việt nếu bạn viết câu hỏi bằng tiếng Việt.
+
+## Build
+```
+cargo test
+cargo build --release
+iscc /DAppVersion=2.0.0 installer\QuizRace.iss
+```
+`tools/fetch_assets.py` tải lại font, emoji và tạo icon.
+
+## Mã nguồn
+- `src/game.rs`: luật chơi và tính điểm (có test).
+- `src/server.rs`: server LAN (trang điện thoại, luồng SSE, API join/answer).
+- `src/main.rs`: màn hình host (macroquad).
+- `src/audio.rs`: nhạc và hiệu ứng âm thanh.
+- `src/player.html`: trang trên điện thoại.
+
+## Ghi công
+- Emoji: [Noto Emoji](https://github.com/googlefonts/noto-emoji), Apache License 2.0 (`assets/emoji/LICENSE-NotoEmoji.txt`).
+- Font: [Be Vietnam Pro](https://github.com/bettergui/BeVietnamPro), SIL Open Font License (`assets/OFL-BeVietnamPro.txt`).
+- Câu hỏi: từ bản gốc (Midterm Review – Organizational Psychology in Business).

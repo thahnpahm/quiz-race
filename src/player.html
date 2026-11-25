@@ -1,0 +1,253 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Quiz Race</title>
+<style>
+@font-face{font-family:BVP;src:url(/font.ttf);font-weight:400 600}
+@font-face{font-family:BVP;src:url(/font-bold.ttf);font-weight:700 900}
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#3a1c71;--card:#563c85;--cardb:#654d91;--accent:#ffd23f;--ink:#fff}
+body.th-race{--bg:#20222e;--card:#3f414b;--cardb:#4f5159;--accent:#ff4d3d}
+body.th-swim{--bg:#0a5fa8;--card:#2c75b4;--cardb:#3d81bb;--accent:#ffe066}
+body.th-hike{--bg:#2e5b3f;--card:#4b725a;--cardb:#5a7e67;--accent:#ffd166}
+html,body{min-height:100%}
+body{font-family:BVP,system-ui,sans-serif;font-weight:600;color:var(--ink);background:var(--bg);transition:background-color .6s;-webkit-tap-highlight-color:transparent;overflow-x:hidden}
+button{font:inherit;color:inherit;cursor:pointer;border:0}
+#app{max-width:560px;margin:0 auto;padding:16px 16px 40px;min-height:100vh;display:flex;flex-direction:column;gap:14px;animation:in .35s ease-out}
+@keyframes in{from{opacity:0;transform:translateY(14px)}}
+.card{background:var(--card);border:2px solid var(--cardb);border-radius:20px}
+.btn{background:var(--accent);color:#1b1b1b;font-weight:700;border-radius:16px;padding:14px 26px;font-size:1.15rem;box-shadow:0 5px 0 rgba(0,0,0,.3);transition:transform .08s,box-shadow .08s}
+.btn:active{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.3)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn.ghost{background:var(--card);color:#fff;box-shadow:none;font-size:.95rem;padding:10px 16px}
+.pill{display:inline-flex;align-items:center;gap:6px;padding:4px 12px;border-radius:99px;background:var(--cardb);font-weight:700}
+.badge{display:inline-grid;place-items:center;width:var(--mv,38px);height:var(--mv,38px);border-radius:50%;background:#fff;font-size:calc(var(--mv,38px)*.62);line-height:1;border:3px solid var(--c,#fff);flex:none}
+h1{font-size:2rem;text-align:center;line-height:1.1;margin-top:6px;font-weight:800}
+h2{font-size:1.15rem;margin-bottom:8px}
+.sub{text-align:center;opacity:.85}
+.groups{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.g-btn{border-radius:16px;padding:12px 6px;background:var(--cardb);border:3px solid transparent;font-weight:700;font-size:1.25rem;display:flex;flex-direction:column;align-items:center;gap:2px}
+.g-btn small{font-size:.72rem;font-weight:600;opacity:.85;min-height:1em}
+.g-btn.sel{border-color:var(--accent);transform:scale(1.04)}
+.g-btn:disabled{opacity:.4}
+.avs{display:grid;grid-template-columns:repeat(6,1fr);gap:8px}
+.av-btn{aspect-ratio:1;border-radius:14px;background:var(--cardb);font-size:1.7rem;border:3px solid transparent}
+.av-btn.sel{border-color:var(--accent);transform:scale(1.1)}
+.err{color:#fff;background:#b3261e;padding:8px 12px;border-radius:12px;text-align:center}
+.center{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;text-align:center;flex:1;padding:20px}
+.me-bar{display:flex;align-items:center;gap:10px;padding:8px 12px}
+.topline{display:flex;justify-content:space-between;align-items:center}
+.timer{height:14px;border-radius:99px;background:var(--cardb);overflow:hidden}
+.timer>div{height:100%;background:var(--accent);width:100%}
+.qtext{font-size:1.25rem;line-height:1.35;padding:16px}
+.opts{display:grid;gap:10px}
+.opt{display:flex;gap:12px;align-items:center;text-align:left;background:var(--o);padding:14px;border-radius:16px;font-size:1.05rem;font-weight:700;box-shadow:0 5px 0 rgba(0,0,0,.3);line-height:1.25;animation:in .3s ease-out backwards}
+.opt:nth-child(2){animation-delay:.05s}.opt:nth-child(3){animation-delay:.1s}.opt:nth-child(4){animation-delay:.15s}
+.opt:active{transform:translateY(4px);box-shadow:0 1px 0 rgba(0,0,0,.3)}
+.opt .l{flex:none;width:34px;height:34px;border-radius:10px;background:rgba(0,0,0,.25);display:grid;place-items:center}
+.opt.picked{outline:4px solid #fff}
+.opt.dim{opacity:.35;box-shadow:none}
+.opt.right{outline:4px solid #fff;animation:pop .5s}
+.opt-0{--o:#e21b3c}.opt-1{--o:#1368ce}.opt-2{--o:#d89e00}.opt-3{--o:#26890c}
+@keyframes pop{50%{transform:scale(1.05)}}
+.bigicon{font-size:4.5rem;line-height:1;animation:pop .6s}
+.pts{font-size:2.4rem;font-weight:800;color:var(--accent)}
+.cd{font-size:8rem;font-weight:800;line-height:1;animation:pop 1s infinite}
+.lane{display:flex;align-items:center;gap:8px;height:54px}
+.lane .g{background:var(--c);color:#111;border-radius:8px;padding:1px 8px;font-weight:800}
+.run{position:relative;flex:1;height:100%;border-radius:12px;overflow:hidden;background:#2d303c}
+.th-race .run{border-top:3px solid #ff4d3d;border-bottom:3px solid #fff}
+.th-swim .run{background:#3ab8e4;border-top:4px solid #ff6b6b;border-bottom:4px solid #fff}
+.th-hike .run{background:#6a8f4e}
+.run::before{content:"";position:absolute;left:0;right:0;top:50%;border-top:3px dashed rgba(255,255,255,.4)}
+.mover{position:absolute;top:50%;left:calc((100% - 74px) * var(--p,0) + 3px);transform:translateY(-50%);display:flex;align-items:center;gap:2px;transition:left 1.6s cubic-bezier(.25,.9,.3,1);font-size:1.4rem}
+.finish{position:absolute;right:0;top:0;bottom:0;width:28px;display:grid;place-items:center;font-size:1.2rem}
+.th-race .finish{background:repeating-conic-gradient(#000 0 25%,#fff 0 50%) 0 0/12px 12px}
+.th-swim .finish{background:#e8f6fc}
+table.lb{width:100%;border-collapse:separate;border-spacing:0 6px}
+table.lb th{font-size:.8rem;text-transform:uppercase;letter-spacing:.06em;opacity:.8;text-align:center;padding:2px 8px}
+table.lb td{background:var(--card);padding:6px 10px;text-align:center}
+table.lb td:first-child{border-radius:12px 0 0 12px}table.lb td:last-child{border-radius:0 12px 12px 0}
+table.lb td.team{text-align:left;display:flex;align-items:center;gap:10px;font-weight:700}
+table.lb tr.me td{background:var(--accent);color:#1b1b1b}
+.offline{position:fixed;left:0;right:0;top:0;background:#c0392b;text-align:center;padding:6px;font-weight:700;z-index:9}
+</style></head>
+<body><div id="app"></div>
+<script>
+const COLORS = ['#ff595e','#ff924c','#ffca3a','#8ac926','#2ec4b6','#4cc9f0','#9d7bff','#f15bb5','#e0e0e0','#a0e426','#ff8fab','#b8f2e6'];
+const THEMES = [
+  { cls: 'th-race', name: 'Grand Prix', emoji: '🏎️', finish: '', pre: '' },
+  { cls: 'th-swim', name: 'Splash Cup', emoji: '🏊', finish: '🏅', pre: '💦' },
+  { cls: 'th-hike', name: 'Summit Trek', emoji: '🥾', finish: '🏔️', pre: '🎒' },
+];
+const LETTERS = ['A', 'B', 'C', 'D'];
+const $ = (s) => document.querySelector(s);
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const fmt = (n) => Number(n).toLocaleString('en-US');
+const th = () => THEMES[S.part % 3];
+const cap = (p) => `Part ${p + 1} · The ${THEMES[p % 3].name}`;
+const color = (id) => COLORS[S.teamIds.indexOf(id)] || '#fff';
+const badge = (t, mv) => `<span class="badge" style="--mv:${mv}px;--c:${color(t.id)}">${esc(t.avatar)}</span>`;
+
+let S = null, deadline = 0, selG = null, selA = null, err = '', lastSig = '', wasMe = false, cdTimer = 0;
+let token = '';
+try { token = localStorage.getItem('qtoken') || ''; } catch {}
+if (!/^[A-Za-z0-9]{8,64}$/.test(token)) {
+  token = Array.from(crypto.getRandomValues(new Uint8Array(12)), (b) => b.toString(16).padStart(2, '0')).join('');
+  try { localStorage.setItem('qtoken', token); } catch {}
+}
+const app = $('#app');
+const api = (o) => fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...o, token }) })
+  .then((r) => r.json()).catch(() => ({ error: 'Connection lost — try again.' }));
+
+const es = new EventSource('/events?t=' + token);
+es.onmessage = (e) => {
+  S = JSON.parse(e.data); offline(false);
+  if (S.phase === 'question' && S.remainingMs != null) deadline = Date.now() + S.remainingMs;
+  if (wasMe && !S.me) err = 'You were removed by the host — pick a group again.';
+  wasMe = !!S.me;
+  render();
+};
+es.onerror = () => offline(true);
+function offline(on) {
+  let o = $('.offline');
+  if (on && !o) { o = document.createElement('div'); o.className = 'offline'; o.textContent = 'Reconnecting…'; document.body.appendChild(o); }
+  if (!on && o) o.remove();
+}
+
+function render() {
+  const lobby = S.phase === 'final' || (S.part === 0 && S.phase === 'waiting');
+  document.body.className = lobby ? '' : th().cls;
+  const sig = [S.me && S.me.id, S.phase, S.part, S.qi, S.myChoice, S.me ? '' : S.teams.map((t) => t.id + '' + t.connected).join()].join('|');
+  if (sig === lastSig && S.phase !== 'waiting') return; // don't disturb the screen while other teams act
+  lastSig = sig;
+  clearInterval(cdTimer);
+  if (!S.me) return joinScreen();
+  ({ waiting, countdown, question, reveal, results, final })[S.phase]();
+}
+
+function joinScreen() {
+  const taken = Object.fromEntries(S.teams.filter((t) => t.connected).map((t) => [t.id, t]));
+  app.innerHTML = `
+    <h1>🏁 ${esc(S.title)}</h1><p class="sub">${esc(S.subtitle)}</p>
+    <div class="card" style="padding:14px"><h2>1 · Choose your group</h2><div class="groups">
+      ${S.teamIds.map((id) => `<button class="g-btn ${selG === id ? 'sel' : ''}" data-g="${id}" ${taken[id] ? 'disabled' : ''}>Group ${id}<small>${taken[id] ? esc(taken[id].avatar) + ' taken' : ''}</small></button>`).join('')}
+    </div></div>
+    <div class="card" style="padding:14px"><h2>2 · Pick your avatar</h2><div class="avs">
+      ${S.avatars.map((a) => `<button class="av-btn ${selA === a ? 'sel' : ''}" data-a="${a}">${a}</button>`).join('')}
+    </div></div>
+    ${err ? `<div class="err">${esc(err)}</div>` : ''}
+    <button class="btn" id="go" ${selG && selA ? '' : 'disabled'}>Join the game 🚀</button>`;
+  app.querySelectorAll('[data-g]').forEach((b) => b.onclick = () => { selG = +b.dataset.g; err = ''; joinScreen(); });
+  app.querySelectorAll('[data-a]').forEach((b) => b.onclick = () => { selA = b.dataset.a; err = ''; joinScreen(); });
+  $('#go').onclick = async () => {
+    err = ''; $('#go').disabled = true;
+    const r = await api({ t: 'join', team: selG, avatar: selA });
+    if (r.error) { err = r.error; lastSig = ''; joinScreen(); }
+  };
+}
+
+const myTeam = () => S.teams.find((t) => t.id === S.me.id) || { total: 0, scores: [], id: S.me.id, avatar: S.me.avatar };
+const meBar = () => `<div class="card me-bar">${badge(S.me, 40)}<b>Group ${S.me.id}</b><span style="margin-left:auto" class="pill">⭐ ${fmt(myTeam().total)}</span></div>`;
+
+function lane() {
+  const t = myTeam(), p = Math.min(1, (t.scores[S.part] || 0) / S.maxPerPart);
+  return `<div class="card" style="padding:8px 10px"><div class="lane" style="--c:${color(t.id)}"><span class="g">G${t.id}</span>
+    <div class="run"><span class="finish">${th().finish}</span><div class="mover" id="mv"><span>${th().pre}</span>${badge(t, 38)}</div></div></div></div>`;
+}
+// animate the mover from its last position to the new one
+let lastP = 0;
+function moveLane() {
+  const el = $('#mv'); if (!el) return;
+  const p = Math.min(1, (myTeam().scores[S.part] || 0) / S.maxPerPart);
+  el.style.transition = 'none'; el.style.setProperty('--p', lastP); el.offsetWidth;
+  el.style.transition = ''; el.style.setProperty('--p', p); lastP = p;
+}
+
+function waiting() {
+  const first = S.part === 0;
+  lastP = 0;
+  app.innerHTML = `${meBar()}<div class="center">
+    ${badge(S.me, 96)}
+    <h1>${first ? "You're in!" : 'Part ' + S.part + ' done!'}</h1>
+    <p>${first ? 'Waiting for the host to start Part 1…' : `Next up: <b>${cap(S.part)}</b> ${th().emoji}<br>Listen to the presentation — the quiz starts when the host says go.`}</p>
+    <div class="pill">${S.teams.filter((t) => t.connected).length} teams connected</div>
+    ${first ? '<button class="btn ghost" id="leave">Change group / avatar</button>' : ''}</div>`;
+  const l = $('#leave'); if (l) l.onclick = () => api({ t: 'leave' });
+}
+
+function countdown() {
+  app.innerHTML = `${meBar()}<div class="center"><div class="bigicon">${th().emoji}</div><h1>${cap(S.part)}</h1><p>Get ready!</p><div class="cd" id="cd">3</div></div>`;
+  const end = Date.now() + (S.countdownMs || 3000);
+  cdTimer = setInterval(() => { const el = $('#cd'); if (el) el.textContent = Math.max(1, Math.ceil((end - Date.now()) / 1000)); }, 200);
+}
+
+function question() {
+  const q = S.question, locked = S.myChoice != null;
+  app.innerHTML = `${meBar()}${lane()}
+    <div class="topline"><span class="pill">${th().emoji} Q${S.qi + 1}/${S.qCount}</span><span class="pill" id="sec">${S.qSeconds}s</span></div>
+    <div class="timer"><div id="bar"></div></div>
+    <div class="card qtext">${esc(q.q)}</div>
+    <div class="opts">${q.options.map((o, i) => `<button class="opt opt-${i} ${locked ? (S.myChoice === i ? 'picked' : 'dim') : ''}" data-i="${i}" ${locked ? 'disabled' : ''}><span class="l">${LETTERS[i]}</span>${esc(o)}</button>`).join('')}</div>
+    ${locked ? '<p class="sub">🔒 Locked in! Waiting for the other teams…</p>' : ''}`;
+  moveLane();
+  app.querySelectorAll('.opt').forEach((b) => b.onclick = () => {
+    if (S.myChoice != null) return;
+    S.myChoice = +b.dataset.i; api({ t: 'answer', choice: S.myChoice });
+    if (navigator.vibrate) navigator.vibrate(30);
+    lastSig = ''; render();
+  });
+  const tick = () => {
+    if (S.phase !== 'question') return;
+    const left = Math.max(0, deadline - Date.now()), bar = $('#bar'), sec = $('#sec');
+    if (!bar) return;
+    bar.style.width = (left / (S.qSeconds * 1000) * 100) + '%'; sec.textContent = Math.ceil(left / 1000) + 's';
+    if (left > 0) setTimeout(tick, 100);
+  };
+  tick();
+}
+
+function rank(part) {
+  const v = (t) => part == null ? [t.total, t.correct.reduce((a, b) => a + b, 0), t.time.reduce((a, b) => a + b, 0)] : [t.scores[part], t.correct[part], t.time[part]];
+  return [...S.teams].sort((a, b) => { const x = v(a), y = v(b); return y[0] - x[0] || y[1] - x[1] || x[2] - y[2] || a.id - b.id; })
+    .map((t, i) => ({ ...t, rank: i + 1, pts: v(t)[0], cor: v(t)[1], ms: v(t)[2] }));
+}
+
+function reveal() {
+  const r = S.reveal, mine = r.mine || { choice: null, correct: false, points: 0 };
+  const q = S.question, rk = rank(S.part).find((t) => t.id === S.me.id);
+  app.innerHTML = `${meBar()}${lane()}
+    <div class="card center" style="flex:none;padding:18px">
+      <div class="bigicon">${mine.choice == null ? '⏰' : mine.correct ? '✅' : '❌'}</div>
+      <h1>${mine.choice == null ? "Time's up!" : mine.correct ? 'Correct!' : 'Not quite'}</h1>
+      ${mine.correct ? `<div class="pts">+${fmt(mine.points)}</div>` : ''}
+      <p>Part score <b>${fmt(rk.pts)}</b> · Rank <b>#${rk.rank}</b> of ${S.teams.length}</p></div>
+    <div class="card qtext" style="font-size:1rem">${esc(q.q)}</div>
+    <div class="opts">${q.options.map((o, i) => `<div class="opt opt-${i} ${i === r.correct ? 'right' : 'dim'}"><span class="l">${i === r.correct ? '✓' : LETTERS[i]}</span>${esc(o)}</div>`).join('')}</div>
+    <p class="sub">Next question coming up…</p>`;
+  moveLane();
+  if (navigator.vibrate) navigator.vibrate(mine.correct ? [40, 60, 40] : 120);
+}
+
+function lb(rows, cols) {
+  return `<table class="lb"><thead><tr><th>#</th><th style="text-align:left">Team</th>${cols.map((c) => `<th>${c.h}</th>`).join('')}</tr></thead><tbody>${rows.map((r) =>
+    `<tr class="${r.id === S.me.id ? 'me' : ''}"><td>${['🥇', '🥈', '🥉'][r.rank - 1] || r.rank}</td><td class="team">${badge(r, 30)}Group ${r.id}</td>${cols.map((c) => `<td>${c.v(r)}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+}
+
+function results() {
+  const rows = rank(S.part), me = rows.find((t) => t.id === S.me.id);
+  app.innerHTML = `${meBar()}<div class="card center" style="flex:none;padding:18px">
+    <div class="bigicon">${['🥇', '🥈', '🥉'][me.rank - 1] || '🎖️'}</div>
+    <h1>${th().name} finished!</h1><p>Your group came <b>#${me.rank}</b> · ${me.cor}/${S.qCount} correct</p><div class="pts">${fmt(me.pts)} pts</div></div>
+    ${lb(rows, [{ h: '✔', v: (r) => r.cor }, { h: 'Time', v: (r) => (r.ms / 1000).toFixed(1) + 's' }, { h: 'Pts', v: (r) => fmt(r.pts) }])}
+    <p class="sub">${S.part + 1 < S.partCount ? 'Eyes up front — the next part is being presented!' : 'Final results coming up…'}</p>`;
+}
+
+function final() {
+  const rows = rank(null), me = rows.find((t) => t.id === S.me.id);
+  app.innerHTML = `${meBar()}<div class="card center" style="flex:none;padding:18px">
+    <div class="bigicon">${['🏆', '🥈', '🥉'][me.rank - 1] || '🎉'}</div><h1>Final: #${me.rank}</h1>
+    <p>${me.cor}/${S.totalQ} correct</p><div class="pts">${fmt(me.pts)} pts</div></div>
+    ${lb(rows, [{ h: '✔', v: (r) => r.cor }, { h: 'Pts', v: (r) => fmt(r.pts) }])}`;
+}
+</script></body></html>

@@ -1,0 +1,183 @@
+{
+  "title": "Midterm Showdown",
+  "subtitle": "Organizational Psychology in Business",
+  "question_seconds": 20,
+  "teams": [
+    1,
+    2,
+    3,
+    4,
+    6,
+    7,
+    8,
+    9,
+    10
+  ],
+  "parts": [
+    {
+      "title": "General Issues in Organizational Psychology in Business",
+      "questions": [
+        {
+          "q": "An employee receives contradictory instructions from two different managers about the same task. Which concept does this describe?",
+          "options": [
+            "Role ambiguity",
+            "Role conflict",
+            "Span of control",
+            "Informal norm"
+          ],
+          "answer": 1
+        },
+        {
+          "q": "A team is very close and loyal, but its shared norm is to work slowly and not exceed a \"fair\" output. What is the most likely effect of this cohesion?",
+          "options": [
+            "It improves performance because members support each other",
+            "It has no effect on performance",
+            "It lowers performance because the group's standard is negative",
+            "It automatically turns the team into a formal group"
+          ],
+          "answer": 2
+        },
+        {
+          "q": "Which example best shows task cohesion (commitment to the task)?",
+          "options": [
+            "Colleagues who enjoy sharing lunch breaks together",
+            "Staff who are proud of their department's reputation",
+            "Employees who are friends outside of work",
+            "A project team that is determined to deliver the project well"
+          ],
+          "answer": 3
+        },
+        {
+          "q": "According to the punctuated equilibrium model, when do teams typically make a major change in how they work?",
+          "options": [
+            "At the very first meeting",
+            "At the midpoint between the first meeting and the deadline",
+            "Only after the conflict (storming) stage ends",
+            "Right before the deadline"
+          ],
+          "answer": 1
+        },
+        {
+          "q": "Which statement about psychological safety is correct?",
+          "options": [
+            "It is the same thing as team cohesion",
+            "A close team can still lack psychological safety if members avoid disagreement",
+            "It means team members never experience conflict",
+            "It only depends on employees' personality traits"
+          ],
+          "answer": 1
+        }
+      ]
+    },
+    {
+      "title": "Psychological Phenomena within Business Organizations",
+      "questions": [
+        {
+          "q": "In Schein's model of culture, stories, rituals and ceremonies belong to which level?",
+          "options": [
+            "Basic assumptions",
+            "Espoused beliefs and values",
+            "Artifacts",
+            "Psychological climate"
+          ],
+          "answer": 2
+        },
+        {
+          "q": "What is the main difference between tradition and psychological climate?",
+          "options": [
+            "Tradition is relatively stable, while psychological climate is flexible and changes easily",
+            "Tradition is short-term, while psychological climate lasts for generations",
+            "Tradition belongs to individuals, while climate belongs to firms",
+            "There is no difference between them"
+          ],
+          "answer": 0
+        },
+        {
+          "q": "Two team members argue over who should take on a duty and how to divide the budget. What type of conflict is this?",
+          "options": [
+            "Task conflict",
+            "Relationship conflict",
+            "Process conflict",
+            "Competitive conflict"
+          ],
+          "answer": 2
+        },
+        {
+          "q": "A manager ignores a dispute between two employees, hoping it will disappear on its own. According to dual concern theory, which conflict style is this?",
+          "options": [
+            "Obliging",
+            "Avoiding",
+            "Compromising",
+            "Integrating"
+          ],
+          "answer": 1
+        },
+        {
+          "q": "Which statement correctly links the five phenomena?",
+          "options": [
+            "A healthy psychological climate speeds the spread of positive mood",
+            "Competition has no connection to conflict or culture",
+            "Emotional contagion only happens in toxic climates",
+            "Tradition and conflict are unrelated to climate"
+          ],
+          "answer": 0
+        }
+      ]
+    },
+    {
+      "title": "Psychological Theories for Enhancing Employee Motivation",
+      "questions": [
+        {
+          "q": "Which of the following is a motivator (not a hygiene factor) in Herzberg's two-factor theory?",
+          "options": [
+            "Company policy",
+            "Base salary",
+            "Working conditions",
+            "Achievement and recognition"
+          ],
+          "answer": 3
+        },
+        {
+          "q": "An employee believes that working harder will not improve their performance. Which component of Vroom's expectancy theory is low?",
+          "options": [
+            "Expectancy",
+            "Instrumentality",
+            "Valence",
+            "Equity"
+          ],
+          "answer": 0
+        },
+        {
+          "q": "An employee wants to build close, friendly relationships with colleagues. Which of McClelland's three needs does this show?",
+          "options": [
+            "Need for achievement",
+            "Need for power",
+            "Need for affiliation",
+            "Need for security"
+          ],
+          "answer": 2
+        },
+        {
+          "q": "According to equity theory, which of the following is NOT a way an employee may react to perceived inequity?",
+          "options": [
+            "Changing their own inputs or outcomes",
+            "Choosing a different comparison person",
+            "Distorting their perception of inputs or outcomes",
+            "Setting a more difficult personal goal"
+          ],
+          "answer": 3
+        },
+        {
+          "q": "Which of the following is NOT one of the five core job characteristics in the Job Characteristics Model?",
+          "options": [
+            "Skill variety",
+            "Task identity",
+            "Expectancy",
+            "Autonomy"
+          ],
+          "answer": 2
+        }
+      ]
+    }
+  ]
+}
