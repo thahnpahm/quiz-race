@@ -335,6 +335,18 @@ mod tests {
         assert!(decode_song(std::path::Path::new("Cargo.toml")).is_err());
     }
 
+    /// Decode a real song: `QUIZ_RACE_SONG=path cargo test -- --ignored real_song`
+    #[test]
+    #[ignore]
+    fn real_song_decodes() {
+        let p = std::env::var("QUIZ_RACE_SONG").expect("set QUIZ_RACE_SONG");
+        let t = std::time::Instant::now();
+        let out = decode_song(std::path::Path::new(&p)).unwrap();
+        let secs = (out.len() - 44) as f32 / 4.0 / SR as f32;
+        println!("decoded {secs:.1} s of audio in {:?}", t.elapsed());
+        assert!(secs > 10.0);
+    }
+
     #[test]
     fn resampling_keeps_duration() {
         let st = vec![0.25f32; 2 * 48000];
