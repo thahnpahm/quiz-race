@@ -364,6 +364,8 @@ struct App {
     own_music: bool,
     loads: (mpsc::Sender<Load>, mpsc::Receiver<Load>),
     muted: bool,
+    /// Music paused between rounds (sound effects still play).
+    music_paused: bool,
     fullscreen: bool,
     lanes: HashMap<u32, f32>,
     lane_pos: HashMap<u32, Vec2>,
@@ -499,7 +501,11 @@ impl App {
         let t = get_time() as f32;
         if cur.0 != prev.0 {
             match g.phase {
-                Phase::Countdown | Phase::Waiting => self.play(Sfx::Whoosh),
+                Phase::Waiting => self.play(Sfx::Whoosh),
+                Phase::Countdown => {
+                    self.play(Sfx::Whoosh);
+                    self.music_paused = false; // a part starts: music back on
+                }
                 Phase::Question => self.play(Sfx::Go),
                 Phase::Reveal => {
                     let r = g.reveal.as_ref().unwrap();
@@ -513,10 +519,12 @@ impl App {
                 Phase::Results => {
                     self.play(Sfx::Fanfare);
                     self.burst(60);
+                    self.music_paused = true; // end of a part: music fades out until the next part starts
                 }
                 Phase::Final => {
                     self.play(Sfx::Fanfare);
                     self.burst(220);
+                    self.music_paused = true;
                 }
             }
         } else if g.phase == Phase::Question && cur.2 != prev.2 {
@@ -530,15 +538,22 @@ impl App {
         // music: cheerful loop in the lobby / results, driving loop while quizzing
         if let Some(m) = &mut self.music {
             let quiz = matches!(g.phase, Phase::Countdown | Phase::Question | Phase::Reveal);
-            let target = match (self.muted, &m.quiz, quiz) {
+            let target = match (self.muted || self.music_paused, &m.quiz, quiz) {
                 (true, _, _) => (0.0, 0.0),
                 (_, Some(_), true) => (0.0, 0.32),
                 (_, None, true) => (0.25, 0.0), // own song: a little softer while people think
                 _ => (0.38, 0.0),
             };
-            let k = (get_frame_time() * 2.5).min(1.0);
+            // pausing fades out slowly (~3 s); anything else changes quickly
+            let speed = if self.music_paused { 1.2 } else { 2.5 };
+            let k = (get_frame_time() * speed).min(1.0);
             m.vol.0 += (target.0 - m.vol.0) * k;
             m.vol.1 += (target.1 - m.vol.1) * k;
+            for v in [&mut m.vol.0, &mut m.vol.1] {
+                if *v < 0.01 && target == (0.0, 0.0) {
+                    *v = 0.0;
+                }
+            }
             set_sound_volume(&m.lobby, m.vol.0);
             if let Some(q) = &m.quiz {
                 set_sound_volume(q, m.vol.1);
@@ -1046,6 +1061,7 @@ async fn main() {
         own_music: own_music().is_some(),
         loads: (tx, rx),
         muted: false,
+        music_paused: false,
         fullscreen: false,
         lanes: HashMap::new(),
         lane_pos: HashMap::new(),
@@ -1169,6 +1185,15 @@ async fn main() {
         let mut ui_cmd: Option<&str> = None;
 
         draw_header(&ui, &g, now);
+        // pause / play the music (top right, left of the question timer)
+        {
+            let bw = 150.0;
+            let bx = ui.vw - PAD - bw - if g.phase == Phase::Question { 108.0 } else { 0.0 };
+            let label = if app.music_paused { "Play music (P)" } else { "Pause music (P)" };
+            if ui.button(label, bx, 22.0, bw, 40.0, app.music_paused, true) {
+                ui_cmd = Some("music-pause");
+            }
+        }
 
         // main content slides/fades in on every screen change
         let appear = ease(since / 0.4);
@@ -1436,6 +1461,9 @@ async fn main() {
         if let Some(id) = kick_req {
             app.kick_confirm = Some((id, t + 3.0));
         }
+        if is_key_pressed(KeyCode::P) {
+            ui_cmd = Some("music-pause");
+        }
         if is_key_pressed(KeyCode::M) {
             ui_cmd = Some("mute");
         }
@@ -1445,6 +1473,10 @@ async fn main() {
         }
         match ui_cmd {
             Some("mute") => app.muted = !app.muted,
+            Some("music-pause") => {
+                app.music_paused = !app.music_paused;
+                app.toast(if app.music_paused { "Music paused — press P to play" } else { "Music on" });
+            }
             Some("questions") => app.open_questions_file(),
             Some("music") => app.pick_music(),
             Some("music-off") => app.remove_music(),
@@ -1465,6 +1497,9 @@ async fn main() {
                 soak_step_n += 1;
                 if let Some((w, h)) = app.sh.with(|g, now| soak_step(g, now, soak_step_n)) {
                     request_new_screen_size(w, h);
+                }
+                if app.sh.game.lock().unwrap().phase == Phase::Results {
+                    soak_t = t + 6.0; // stay on the results long enough to hear the music fade out
                 }
             }
         }

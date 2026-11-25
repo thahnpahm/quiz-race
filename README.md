@@ -11,7 +11,8 @@ Viết lại từ bản Node.js `quiz-race.zip`: một file exe duy nhất, khô
 - Điện thoại quét mà không vào được (khác Wi-Fi, hoặc Wi-Fi trường/quán chặn các máy gọi nhau): bấm **Online link (Internet)** trong lobby. App tự chạy Cloudflare Tunnel (lần đầu tải `cloudflared.exe` khoảng 55 MB về `%LOCALAPPDATA%\Quiz Race`) và QR tự đổi sang link `https://….trycloudflare.com`, vào được từ bất kỳ mạng nào. Đóng app hoặc bấm **Use Wi-Fi link instead** là link tắt. Ai có link đều mở được trang người chơi trong lúc link còn chạy.
 
 ## Điều khiển (host)
-Space hoặc Enter là nút chính (Start → End question → Next…). M bật/tắt âm thanh, F11 bật/tắt toàn màn hình.
+Space hoặc Enter là nút chính (Start → End question → Next…). P (hoặc nút **Pause music** góc trên bên phải) tạm dừng/phát nhạc, hiệu ứng âm thanh vẫn kêu. M tắt/bật toàn bộ âm thanh. F11 bật/tắt toàn màn hình.
+Hết mỗi phần, nhạc tự nhỏ dần rồi tắt trong lúc xem kết quả và thuyết trình; bấm Start phần sau là nhạc bật lại.
 Nút **Auto-advance** bật/tắt tự chuyển câu. Bấm ✕ trên ô nhóm hai lần để xoá nhóm. Bấm **Reset game** hai lần để xoá điểm (các nhóm vẫn ở lại).
 
 ## Nhạc riêng
