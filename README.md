@@ -18,7 +18,7 @@ Nút **Auto-advance** bật/tắt tự chuyển câu. Bấm ✕ trên ô nhóm h
 ## Nhạc riêng
 - Trong lobby bấm **Music…** rồi chọn một file nhạc (mp3, m4a, aac, ogg, flac, wav). App chép file vào thư mục **Nhạc** của bạn (`Music\Quiz Race\music.<đuôi>`) và phát suốt ván, nhỏ hơn một chút lúc học sinh làm bài; bài dài hơn 4 phút thì chỉ giữ 4 phút đầu. Bấm **Default music** để quay về nhạc có sẵn.
 - Muốn mang nhạc sang máy khác: build **bộ cài riêng có kèm nhạc** (file nhạc nằm cạnh `QuizRace.exe`; bài chọn bằng Music… vẫn được ưu tiên):
-  `iscc /DAppVersion=2.4.0 /DMusicFile=C:\đường\dẫnai.mp3 /DMusicExt=mp3 installer\QuizRace.iss` → `out\QuizRace-…-setup-with-music.exe`. Đừng chia sẻ công khai bộ cài này nếu bài hát có bản quyền; file nhạc không bao giờ nằm trong repo.
+  `iscc /DAppVersion=2.4.0 /DMusicFile=C:\đường\dẫn\bai.mp3 /DMusicExt=mp3 installer\QuizRace.iss` → `out\QuizRace-…-setup-with-music.exe`. Đừng chia sẻ công khai bộ cài này nếu bài hát có bản quyền; file nhạc không bao giờ nằm trong repo.
 - Đổi nơi phát (cắm tivi qua HDMI, tai nghe, loa Bluetooth) khi game đang chạy: tiếng tự chuyển sang thiết bị mặc định mới trong khoảng nửa giây, bài nhạc chạy tiếp. (Bản `vendor/quad-snd` đã được sửa để làm việc này; bản gốc thì mất tiếng.)
 
 ## Đổi câu hỏi
