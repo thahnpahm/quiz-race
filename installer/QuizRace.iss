@@ -21,7 +21,11 @@ DisableProgramGroupPage=yes
 DisableDirPage=yes
 PrivilegesRequired=lowest
 OutputDir=..\out
+#ifdef MusicFile
+OutputBaseFilename=QuizRace-{#AppVersion}-win-x64-setup-with-music
+#else
 OutputBaseFilename=QuizRace-{#AppVersion}-win-x64-setup
+#endif
 SetupIconFile=..\icon.ico
 UninstallDisplayIcon={app}\QuizRace.exe
 UninstallDisplayName=Quiz Race
@@ -37,6 +41,15 @@ CloseApplications=force
 
 [Files]
 Source: "{#ExePath}"; DestDir: "{app}"; DestName: "QuizRace.exe"; Flags: ignoreversion
+; Personal build only: iscc /DMusicFile=C:\path\song.mp3 /DMusicExt=mp3 ... bundles your own song
+; (played unless you pick another with "Music…"). Don't share such an installer: the song isn't ours.
+#ifdef MusicFile
+Source: "{#MusicFile}"; DestDir: "{app}"; DestName: "music.{#MusicExt}"; Flags: ignoreversion
+#endif
+
+[InstallDelete]
+; a previous personal build's song, so a new one (or none) takes its place
+Type: files; Name: "{app}\music.*"
 
 [Icons]
 Name: "{autoprograms}\Quiz Race"; Filename: "{app}\QuizRace.exe"

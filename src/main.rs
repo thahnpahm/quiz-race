@@ -306,14 +306,53 @@ enum Load {
 
 const MUSIC_EXTS: [&str; 6] = ["mp3", "m4a", "aac", "ogg", "flac", "wav"];
 
+/// Where "Music…" keeps the song: <your Music folder>\Quiz Race (falls back to AppData).
 fn music_dir() -> Option<PathBuf> {
+    known_music_folder().map(|m| m.join("Quiz Race")).or_else(legacy_music_dir)
+}
+
+/// Where versions up to 2.3 kept it.
+fn legacy_music_dir() -> Option<PathBuf> {
     std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("Quiz Race"))
 }
 
+/// The Music folder as Windows has it (also when moved, e.g. into OneDrive).
+#[cfg(windows)]
+fn known_music_folder() -> Option<PathBuf> {
+    use std::os::windows::ffi::OsStringExt;
+    unsafe {
+        let mut p: *mut u16 = std::ptr::null_mut();
+        let hr = winapi::um::shlobj::SHGetKnownFolderPath(&winapi::um::knownfolders::FOLDERID_Music, 0, std::ptr::null_mut(), &mut p);
+        if hr < 0 || p.is_null() {
+            return None;
+        }
+        let mut n = 0;
+        while *p.add(n) != 0 {
+            n += 1;
+        }
+        let path = std::ffi::OsString::from_wide(std::slice::from_raw_parts(p, n));
+        winapi::um::combaseapi::CoTaskMemFree(p as _);
+        Some(PathBuf::from(path))
+    }
+}
+#[cfg(not(windows))]
+fn known_music_folder() -> Option<PathBuf> {
+    None
+}
+
 /// The song chosen with "Music…", kept as %APPDATA%\Quiz Race\music.<ext>.
+/// The song to play: one picked with "Music…", else one installed next to the exe
+/// (personal installer built with /DMusicFile). "Default music" turns both off.
 fn own_music() -> Option<PathBuf> {
-    let d = music_dir()?;
-    MUSIC_EXTS.iter().map(|e| d.join(format!("music.{e}"))).find(|p| p.is_file())
+    if music_dir().is_some_and(|d| d.join("music.off").is_file()) {
+        return None;
+    }
+    let exe_dir = std::env::current_exe().ok().and_then(|e| e.parent().map(|d| d.to_path_buf()));
+    [music_dir(), legacy_music_dir(), exe_dir]
+        .into_iter()
+        .flatten()
+        .flat_map(|d| MUSIC_EXTS.iter().map(move |e| d.join(format!("music.{e}"))))
+        .find(|p| p.is_file())
 }
 
 /// Prepare the background music (own song if there is one, else the built-in loops).
@@ -454,9 +493,12 @@ impl App {
         let Some(dir) = music_dir() else { return };
         let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp3").to_lowercase();
         let _ = std::fs::create_dir_all(&dir);
-        for e in MUSIC_EXTS {
-            let _ = std::fs::remove_file(dir.join(format!("music.{e}")));
+        for d in [Some(dir.clone()), legacy_music_dir()].into_iter().flatten() {
+            for e in MUSIC_EXTS {
+                let _ = std::fs::remove_file(d.join(format!("music.{e}")));
+            }
         }
+        let _ = std::fs::remove_file(dir.join("music.off"));
         match std::fs::copy(&src, dir.join(format!("music.{ext}"))) {
             Ok(_) => {
                 self.toast("Loading your music…");
@@ -468,10 +510,15 @@ impl App {
 
     /// Back to the built-in music.
     fn remove_music(&mut self) {
-        if let Some(dir) = music_dir() {
+        for dir in [music_dir(), legacy_music_dir()].into_iter().flatten() {
             for e in MUSIC_EXTS {
                 let _ = std::fs::remove_file(dir.join(format!("music.{e}")));
             }
+        }
+        // a song installed with the game stays on disk; this marker switches it off
+        if let Some(d) = music_dir() {
+            let _ = std::fs::create_dir_all(&d);
+            let _ = std::fs::write(d.join("music.off"), b"");
         }
         self.toast("Back to the built-in music");
         load_music(self.loads.0.clone());

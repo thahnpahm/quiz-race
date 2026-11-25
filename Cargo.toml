@@ -1,6 +1,6 @@
 [package]
 name = "quiz-race"
-version = "2.3.0"
+version = "2.4.0"
 edition = "2021"
 description = "Midterm Showdown – class quiz race: host screen + built-in LAN server"
 
@@ -12,6 +12,9 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 symphonia = { version = "0.5", default-features = false, features = ["mp3", "aac", "isomp4", "flac", "vorbis", "ogg", "wav", "pcm"] }
 rfd = "0.15"
+
+[target.'cfg(windows)'.dependencies]
+winapi = { version = "0.3", features = ["shlobj", "knownfolders", "combaseapi"] }
 
 [profile.release]
 strip = true
@@ -25,3 +28,7 @@ opt-level = 2
 
 [build-dependencies]
 winresource = "0.1"
+
+[patch.crates-io]
+# quad-snd with output-device switching (src/wasapi_snd.rs), see vendor/quad-snd
+quad-snd = { path = "vendor/quad-snd" }
