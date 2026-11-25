@@ -9,7 +9,7 @@ mod tunnel;
 
 use audio::Sfx;
 use game::{Game, Phase, Quiz, Ranked};
-use macroquad::audio::{load_sound_from_bytes, play_sound, play_sound_once, set_sound_volume, PlaySoundParams, Sound};
+use macroquad::audio::{load_sound_from_bytes, play_sound, play_sound_once, set_sound_volume, stop_sound, PlaySoundParams, Sound};
 use macroquad::miniquad;
 use macroquad::prelude::*;
 use qrcodegen::{QrCode, QrCodeEcc};
@@ -290,11 +290,49 @@ enum Act {
     Reset,
 }
 
-struct Sounds {
-    sfx: HashMap<u8, Sound>,
+/// Background music: the lobby loop, plus a separate loop for the quiz (built-in music only;
+/// your own song plays all game long).
+struct Music {
     lobby: Sound,
-    quiz: Sound,
+    quiz: Option<Sound>,
     vol: (f32, f32),
+}
+
+/// Sounds prepared off the main thread.
+enum Load {
+    Sfx(Vec<(u8, Vec<u8>)>),
+    Music { lobby: Vec<u8>, quiz: Option<Vec<u8>>, err: Option<String> },
+}
+
+const MUSIC_EXTS: [&str; 6] = ["mp3", "m4a", "aac", "ogg", "flac", "wav"];
+
+fn music_dir() -> Option<PathBuf> {
+    std::env::var_os("APPDATA").map(|a| PathBuf::from(a).join("Quiz Race"))
+}
+
+/// The song chosen with "Music…", kept as %APPDATA%\Quiz Race\music.<ext>.
+fn own_music() -> Option<PathBuf> {
+    let d = music_dir()?;
+    MUSIC_EXTS.iter().map(|e| d.join(format!("music.{e}"))).find(|p| p.is_file())
+}
+
+/// Prepare the background music (own song if there is one, else the built-in loops).
+fn load_music(tx: mpsc::Sender<Load>) {
+    std::thread::spawn(move || {
+        let synth = || (audio::wav(&audio::music_lobby()), Some(audio::wav(&audio::music_quiz())));
+        let msg = match own_music().map(|p| audio::decode_song(&p)) {
+            Some(Ok(song)) => Load::Music { lobby: song, quiz: None, err: None },
+            Some(Err(e)) => {
+                let (lobby, quiz) = synth();
+                Load::Music { lobby, quiz, err: Some(format!("Music file not used: {e}")) }
+            }
+            None => {
+                let (lobby, quiz) = synth();
+                Load::Music { lobby, quiz, err: None }
+            }
+        };
+        let _ = tx.send(msg);
+    });
 }
 
 struct Confetti {
@@ -321,8 +359,10 @@ struct App {
     qr: Option<(String, QrCode)>,
     quiz_src: String,
     quiz_err: Option<String>,
-    snd: Option<Sounds>,
-    snd_rx: Option<mpsc::Receiver<Vec<(u8, Vec<u8>)>>>,
+    sfx: Option<HashMap<u8, Sound>>,
+    music: Option<Music>,
+    own_music: bool,
+    loads: (mpsc::Sender<Load>, mpsc::Receiver<Load>),
     muted: bool,
     fullscreen: bool,
     lanes: HashMap<u32, f32>,
@@ -364,8 +404,8 @@ impl App {
     }
 
     fn play(&self, s: Sfx) {
-        if let (Some(snd), false) = (&self.snd, self.muted) {
-            if let Some(x) = snd.sfx.get(&sfx_id(s)) {
+        if let (Some(sfx), false) = (&self.sfx, self.muted) {
+            if let Some(x) = sfx.get(&sfx_id(s)) {
                 play_sound_once(x);
             }
         }
@@ -404,6 +444,35 @@ impl App {
 
     fn toast(&mut self, msg: &str) {
         self.toast = Some((msg.to_string(), get_time() as f32));
+    }
+
+    /// "Music…": pick a song file; it is copied next to the questions file and played.
+    fn pick_music(&mut self) {
+        let Some(src) = rfd::FileDialog::new().set_title("Choose a song for the game").add_filter("Music", &MUSIC_EXTS).pick_file() else { return };
+        let Some(dir) = music_dir() else { return };
+        let ext = src.extension().and_then(|e| e.to_str()).unwrap_or("mp3").to_lowercase();
+        let _ = std::fs::create_dir_all(&dir);
+        for e in MUSIC_EXTS {
+            let _ = std::fs::remove_file(dir.join(format!("music.{e}")));
+        }
+        match std::fs::copy(&src, dir.join(format!("music.{ext}"))) {
+            Ok(_) => {
+                self.toast("Loading your music…");
+                load_music(self.loads.0.clone());
+            }
+            Err(e) => self.toast(&format!("Couldn't copy the song: {e}")),
+        }
+    }
+
+    /// Back to the built-in music.
+    fn remove_music(&mut self) {
+        if let Some(dir) = music_dir() {
+            for e in MUSIC_EXTS {
+                let _ = std::fs::remove_file(dir.join(format!("music.{e}")));
+            }
+        }
+        self.toast("Back to the built-in music");
+        load_music(self.loads.0.clone());
     }
 
     fn open_questions_file(&mut self) {
@@ -459,14 +528,21 @@ impl App {
             self.play(Sfx::Tick);
         }
         // music: cheerful loop in the lobby / results, driving loop while quizzing
-        if let Some(s) = &mut self.snd {
+        if let Some(m) = &mut self.music {
             let quiz = matches!(g.phase, Phase::Countdown | Phase::Question | Phase::Reveal);
-            let target = if self.muted { (0.0, 0.0) } else if quiz { (0.0, 0.32) } else { (0.38, 0.0) };
+            let target = match (self.muted, &m.quiz, quiz) {
+                (true, _, _) => (0.0, 0.0),
+                (_, Some(_), true) => (0.0, 0.32),
+                (_, None, true) => (0.25, 0.0), // own song: a little softer while people think
+                _ => (0.38, 0.0),
+            };
             let k = (get_frame_time() * 2.5).min(1.0);
-            s.vol.0 += (target.0 - s.vol.0) * k;
-            s.vol.1 += (target.1 - s.vol.1) * k;
-            set_sound_volume(&s.lobby, s.vol.0);
-            set_sound_volume(&s.quiz, s.vol.1);
+            m.vol.0 += (target.0 - m.vol.0) * k;
+            m.vol.1 += (target.1 - m.vol.1) * k;
+            set_sound_volume(&m.lobby, m.vol.0);
+            if let Some(q) = &m.quiz {
+                set_sound_volume(q, m.vol.1);
+            }
         }
     }
 
@@ -940,12 +1016,12 @@ async fn main() {
 
     // render music and effects off the main thread so the window shows at once
     let (tx, rx) = mpsc::channel();
+    let sfx_tx = tx.clone();
     std::thread::spawn(move || {
-        let mut v: Vec<(u8, Vec<u8>)> = audio::ALL_SFX.iter().map(|&s| (sfx_id(s), audio::wav(&audio::sfx(s)))).collect();
-        v.push((100, audio::wav(&audio::music_lobby())));
-        v.push((101, audio::wav(&audio::music_quiz())));
-        let _ = tx.send(v);
+        let v: Vec<(u8, Vec<u8>)> = audio::ALL_SFX.iter().map(|&s| (sfx_id(s), audio::wav(&audio::sfx(s)))).collect();
+        let _ = sfx_tx.send(Load::Sfx(v));
     });
+    load_music(tx.clone());
 
     let emoji: HashMap<&'static str, Texture2D> =
         emoji_list::EMOJI.iter().map(|(e, png)| (*e, Texture2D::from_file_with_format(png, Some(ImageFormat::Png)))).collect();
@@ -965,8 +1041,10 @@ async fn main() {
         qr: None,
         quiz_src,
         quiz_err,
-        snd: None,
-        snd_rx: Some(rx),
+        sfx: None,
+        music: None,
+        own_music: own_music().is_some(),
+        loads: (tx, rx),
         muted: false,
         fullscreen: false,
         lanes: HashMap::new(),
@@ -988,27 +1066,41 @@ async fn main() {
 
     loop {
         // sounds ready?
-        if let Some(rx) = &app.snd_rx {
-            if let Ok(v) = rx.try_recv() {
-                let mut sfx = HashMap::new();
-                let (mut lobby, mut quiz) = (None, None);
-                for (id, bytes) in v {
-                    if let Ok(s) = load_sound_from_bytes(&bytes).await {
-                        match id {
-                            100 => lobby = Some(s),
-                            101 => quiz = Some(s),
-                            _ => {
-                                sfx.insert(id, s);
-                            }
+        while let Ok(msg) = app.loads.1.try_recv() {
+            match msg {
+                Load::Sfx(v) => {
+                    let mut sfx = HashMap::new();
+                    for (id, bytes) in v {
+                        if let Ok(s) = load_sound_from_bytes(&bytes).await {
+                            sfx.insert(id, s);
                         }
                     }
+                    app.sfx = Some(sfx);
                 }
-                if let (Some(lobby), Some(quiz)) = (lobby, quiz) {
+                Load::Music { lobby, quiz, err } => {
+                    if let Some(old) = app.music.take() {
+                        stop_sound(&old.lobby);
+                        if let Some(q) = &old.quiz {
+                            stop_sound(q);
+                        }
+                    }
+                    let Ok(lobby) = load_sound_from_bytes(&lobby).await else { continue };
+                    let quiz = match quiz {
+                        Some(b) => load_sound_from_bytes(&b).await.ok(),
+                        None => None,
+                    };
                     play_sound(&lobby, PlaySoundParams { looped: true, volume: 0.0 });
-                    play_sound(&quiz, PlaySoundParams { looped: true, volume: 0.0 });
-                    app.snd = Some(Sounds { sfx, lobby, quiz, vol: (0.0, 0.0) });
+                    if let Some(q) = &quiz {
+                        play_sound(q, PlaySoundParams { looped: true, volume: 0.0 });
+                    }
+                    app.own_music = quiz.is_none();
+                    app.music = Some(Music { lobby, quiz, vol: (0.0, 0.0) });
+                    if let Some(e) = err {
+                        app.toast(&e);
+                    } else if app.own_music {
+                        app.toast("Playing your music");
+                    }
                 }
-                app.snd_rx = None;
             }
         }
 
@@ -1266,8 +1358,16 @@ async fn main() {
             ui_cmd = Some("mute");
         }
         fx += 162.0;
-        if g.phase == Phase::Waiting && g.part == 0 && ui.button("Questions file…", fx, fy, 160.0, 44.0, false, true) {
-            ui_cmd = Some("questions");
+        if g.phase == Phase::Waiting && g.part == 0 {
+            if ui.button("Questions file…", fx, fy, 160.0, 44.0, false, true) {
+                ui_cmd = Some("questions");
+            }
+            fx += 172.0;
+            let (label, cmd) = if app.own_music { ("Own music ×", "music-off") } else { ("Music…", "music") };
+            if ui.button(label, fx, fy, 130.0, 44.0, false, true) {
+                ui_cmd = Some(cmd);
+            }
+            fx += 142.0;
         }
         let last_q = g.qi + 1 >= g.q_count();
         let more_parts = g.part + 1 < g.quiz.parts.len();
@@ -1346,6 +1446,8 @@ async fn main() {
         match ui_cmd {
             Some("mute") => app.muted = !app.muted,
             Some("questions") => app.open_questions_file(),
+            Some("music") => app.pick_music(),
+            Some("music-off") => app.remove_music(),
             Some("online") => app.tunnel = Some(tunnel::Tunnel::start(app.port)),
             Some("lan") => app.tunnel = None,
             _ => {}
