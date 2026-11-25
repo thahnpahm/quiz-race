@@ -13,6 +13,8 @@ pub const GRACE_MS: u64 = 400;
 pub const CLOSE_DELAY_MS: u64 = 600;
 /// When every online team has answered, the question closes after this delay.
 pub const ALL_IN_DELAY_MS: u64 = 700;
+/// A phone counts as online this long after its last poll ended (it re-polls right away).
+pub const POLL_GRACE_MS: u64 = 5000;
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
 pub struct Question {
@@ -172,8 +174,10 @@ pub struct Game {
     pub teams: BTreeMap<u32, Team>,
     answers: HashMap<u32, Answer>,
     pub reveal: Option<Reveal>,
-    /// Open event streams per device token.
-    conns: HashMap<String, u32>,
+    /// Long-poll requests per device token: how many are open, and when the last one ended.
+    conns: HashMap<String, (u32, u64)>,
+    /// Time of the last tick.
+    clock: u64,
     /// Bumped on every change; event streams wait on it.
     pub version: u64,
 }
@@ -199,6 +203,7 @@ impl Game {
             answers: HashMap::new(),
             reveal: None,
             conns: HashMap::new(),
+            clock: 0,
             version: 1,
         }
     }
@@ -216,7 +221,10 @@ impl Game {
         MAX_PER_Q * self.quiz.parts[part].questions.len() as u32
     }
     pub fn online(&self, id: u32) -> bool {
-        self.teams.get(&id).is_some_and(|t| self.conns.get(&t.token).copied().unwrap_or(0) > 0)
+        self.teams.get(&id).is_some_and(|t| self.token_online(&t.token))
+    }
+    fn token_online(&self, token: &str) -> bool {
+        self.conns.get(token).is_some_and(|&(open, last)| open > 0 || self.clock < last + POLL_GRACE_MS)
     }
     pub fn answered(&self, id: u32) -> bool {
         self.answers.contains_key(&id)
@@ -241,6 +249,17 @@ impl Game {
 
     /// Run timers. Call often (every ~50 ms).
     pub fn tick(&mut self, now: u64) {
+        self.clock = now;
+        // phones that stopped polling go offline
+        let gone: Vec<String> =
+            self.conns.iter().filter(|(_, &(open, last))| open == 0 && now >= last + POLL_GRACE_MS).map(|(k, _)| k.clone()).collect();
+        for k in gone {
+            self.conns.remove(&k);
+            if self.team_by_token(&k).is_some() {
+                self.check_all_in(now);
+                self.bump();
+            }
+        }
         match self.phase {
             Phase::Countdown if now >= self.cd_end => self.send_question(0, now),
             Phase::Question if now >= self.close_at => self.end_question(now, now >= self.q_end + CLOSE_DELAY_MS),
@@ -354,8 +373,8 @@ impl Game {
         let ids = self.quiz.teams.clone();
         let old = std::mem::take(&mut self.teams);
         let conns = std::mem::take(&mut self.conns);
-        let version = self.version + 1; // keep counting up so open streams see the change
-        *self = Game { auto: self.auto, version, ..Game::new(self.quiz.clone()) };
+        let version = self.version + 1; // keep counting up so waiting polls see the change
+        *self = Game { auto: self.auto, version, clock: self.clock, ..Game::new(self.quiz.clone()) };
         self.conns = conns;
         for (id, t) in old.into_iter().filter(|(id, _)| ids.contains(id)) {
             self.teams.insert(id, Team { scores: vec![0; n], correct: vec![0; n], time: vec![0; n], ..t });
@@ -364,20 +383,22 @@ impl Game {
 
     // ---------- players ----------
 
+    /// A poll from this phone started. Only a change offline → online counts as a change
+    /// (otherwise every poll would wake every other poll).
     pub fn connect(&mut self, token: &str) {
-        *self.conns.entry(token.to_string()).or_default() += 1;
-        self.bump();
+        let was = self.token_online(token);
+        self.conns.entry(token.to_string()).or_insert((0, 0)).0 += 1;
+        if !was && self.team_by_token(token).is_some() {
+            self.bump();
+        }
     }
 
+    /// A poll ended; the phone stays online for POLL_GRACE_MS (see `tick`).
     pub fn disconnect(&mut self, token: &str, now: u64) {
         if let Some(c) = self.conns.get_mut(token) {
-            *c -= 1;
-            if *c == 0 {
-                self.conns.remove(token);
-            }
+            c.0 = c.0.saturating_sub(1);
+            c.1 = now;
         }
-        self.check_all_in(now);
-        self.bump();
     }
 
     pub fn join(&mut self, token: &str, team: u32, avatar: &str) -> Result<(), String> {
@@ -579,6 +600,7 @@ mod tests {
         assert_eq!(g.teams[&3].avatar, "🐸");
         // an offline team's slot can be taken over
         g.disconnect(B, 0);
+        g.tick(POLL_GRACE_MS);
         g.join("tokenCCCC3", 2, "🐸").unwrap();
         assert_eq!(g.teams[&2].token, "tokenCCCC3");
     }
@@ -629,6 +651,8 @@ mod tests {
     fn offline_teams_do_not_block_and_manual_mode_waits() {
         let mut g = game();
         g.disconnect(B, 0);
+        g.tick(POLL_GRACE_MS);
+        assert!(!g.online(2));
         g.set_auto(false, 0);
         let t0 = to_question(&mut g);
         g.answer(A, 0, t0 + 100);
@@ -711,6 +735,29 @@ mod tests {
         assert!(v.get("reveal").is_none());
         assert_eq!(g.player_view(A, t0)["myChoice"], 2);
         assert!(g.player_view("nobodyXXXX", t0)["me"].is_null());
+    }
+
+    #[test]
+    fn polling_keeps_phone_online_without_waking_everyone() {
+        let mut g = game();
+        let v = g.version;
+        // poll ends, next poll starts a moment later: still online, no state change
+        g.disconnect(A, 1_000);
+        g.tick(1_050);
+        assert!(g.online(1));
+        g.connect(A);
+        assert_eq!(g.version, v);
+        // phone gone: offline after the grace period, and that is a change
+        g.disconnect(A, 2_000);
+        g.tick(2_000 + POLL_GRACE_MS - 1);
+        assert!(g.online(1));
+        g.tick(2_000 + POLL_GRACE_MS);
+        assert!(!g.online(1));
+        assert!(g.version > v);
+        // back again → online, and that is a change too
+        let v = g.version;
+        g.connect(A);
+        assert!(g.online(1) && g.version > v);
     }
 
     #[test]

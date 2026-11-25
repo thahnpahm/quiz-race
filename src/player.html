@@ -100,15 +100,26 @@ const app = $('#app');
 const api = (o) => fetch('/api', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...o, token }) })
   .then((r) => r.json()).catch(() => ({ error: 'Connection lost — try again.' }));
 
-const es = new EventSource('/events?t=' + token);
-es.onmessage = (e) => {
-  S = JSON.parse(e.data); offline(false);
+// long poll: the server answers when the game changes (or after 15 s with no change)
+(async function poll() {
+  let v = 0;
+  for (;;) {
+    try {
+      const r = await fetch(`/poll?t=${token}&v=${v}`, { cache: 'no-store' });
+      if (!r.ok) throw new Error(r.status);
+      const m = await r.json(); offline(false);
+      if (m.v === v) continue;
+      v = m.v; onState(m.s);
+    } catch { offline(true); await new Promise((ok) => setTimeout(ok, 1500)); }
+  }
+})();
+function onState(s) {
+  S = s;
   if (S.phase === 'question' && S.remainingMs != null) deadline = Date.now() + S.remainingMs;
   if (wasMe && !S.me) err = 'You were removed by the host — pick a group again.';
   wasMe = !!S.me;
   render();
-};
-es.onerror = () => offline(true);
+}
 function offline(on) {
   let o = $('.offline');
   if (on && !o) { o = document.createElement('div'); o.className = 'offline'; o.textContent = 'Reconnecting…'; document.body.appendChild(o); }

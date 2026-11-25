@@ -40,7 +40,7 @@ iscc /DAppVersion=2.0.0 installer\QuizRace.iss
 
 ## Mã nguồn
 - `src/game.rs`: luật chơi và tính điểm (có test).
-- `src/server.rs`: server LAN (trang điện thoại, luồng SSE, API join/answer).
+- `src/server.rs`: server LAN (trang điện thoại, long-poll trạng thái, API join/answer). Long-poll thay cho SSE vì tunnel Cloudflare giữ lại luồng SSE.
 - `src/main.rs`: màn hình host (macroquad).
 - `src/audio.rs`: nhạc và hiệu ứng âm thanh.
 - `src/player.html`: trang trên điện thoại.
