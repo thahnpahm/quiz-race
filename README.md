@@ -8,7 +8,7 @@ Viết lại từ bản Node.js `quiz-race.zip`: một file exe duy nhất, khô
 - Bấm đúp `QuizRace-2.0.0-win-x64-setup.exe` là xong: không có bước nào phải chọn, không cần quyền admin. Bộ cài tạo lối tắt Start menu và Desktop, cài xong tự mở game. Gỡ trong Settings → Apps.
 - **Lần đầu mở**, Windows hỏi tường lửa: bấm **Allow** cho mạng Private, nếu không thì điện thoại không vào được.
 - Học sinh quét QR trên màn hình (link `http://<IP máy>:3000`). Máy chiếu và điện thoại phải dùng chung Wi-Fi.
-- Nếu học sinh không chung Wi-Fi: chạy `npx cloudflared tunnel --url http://localhost:3000`, copy link https nó in ra, rồi bấm **Paste public link** trong lobby để QR dùng link đó.
+- Điện thoại quét mà không vào được (khác Wi-Fi, hoặc Wi-Fi trường/quán chặn các máy gọi nhau): bấm **Online link (Internet)** trong lobby. App tự chạy Cloudflare Tunnel (lần đầu tải `cloudflared.exe` khoảng 55 MB về `%LOCALAPPDATA%\Quiz Race`) và QR tự đổi sang link `https://….trycloudflare.com`, vào được từ bất kỳ mạng nào. Đóng app hoặc bấm **Use Wi-Fi link instead** là link tắt. Ai có link đều mở được trang người chơi trong lúc link còn chạy.
 
 ## Điều khiển (host)
 Space hoặc Enter là nút chính (Start → End question → Next…). M bật/tắt âm thanh, F11 bật/tắt toàn màn hình.
@@ -28,11 +28,13 @@ Cũng có thể mở một file khác: `QuizRace.exe đường\dẫn\quiz.json`.
 - Nhóm mất kết nối giữa câu không còn làm câu đó phải chờ hết giờ. Không thể rời nhóm giữa chừng làm mất điểm.
 - Thêm nhạc nền vui nhộn (hai bản: lobby và lúc làm bài), hiệu ứng âm thanh, chuyển cảnh trượt mờ, điểm bay lên trên làn đua, pháo giấy ở màn kết quả. Toàn bộ âm thanh được tổng hợp trong code, không dùng file nào.
 - Màu nền và thẻ là màu đặc, không gradient hay trong suốt (cả màn host lẫn trang điện thoại).
+- Nút Online link: thay cho việc tự chạy cloudflared rồi mở `/host` bằng link công khai như bản gốc.
 - Font Be Vietnam Pro nhúng sẵn, hiện đủ dấu tiếng Việt nếu bạn viết câu hỏi bằng tiếng Việt.
 
 ## Build
 ```
 cargo test
+cargo test -- --ignored online   # thử Online link thật (cần Internet)
 cargo build --release
 iscc /DAppVersion=2.0.0 installer\QuizRace.iss
 ```

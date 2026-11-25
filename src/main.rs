@@ -5,6 +5,7 @@ mod audio;
 mod emoji_list;
 mod game;
 mod server;
+mod tunnel;
 
 use audio::Sfx;
 use game::{Game, Phase, Quiz, Ranked};
@@ -282,7 +283,8 @@ struct Floater {
 struct App {
     sh: Arc<Shared>,
     lan_url: Option<String>,
-    custom_url: Option<String>,
+    port: u16,
+    tunnel: Option<tunnel::Tunnel>,
     server_err: Option<String>,
     qr: Option<(String, QrCode)>,
     quiz_src: String,
@@ -338,7 +340,10 @@ impl App {
     }
 
     fn join_url(&self) -> String {
-        self.custom_url.clone().or_else(|| self.lan_url.clone()).unwrap_or_else(|| "http://localhost:3000/".into())
+        match self.tunnel.as_ref().map(|t| t.state()) {
+            Some(tunnel::State::Ready(u)) => format!("{u}/"),
+            _ => self.lan_url.clone().unwrap_or_else(|| format!("http://localhost:{}/", self.port)),
+        }
     }
 
     fn apply(&mut self, acts: Vec<Act>) {
@@ -381,16 +386,6 @@ impl App {
         self.toast("Edit questions.json, then press Reset game to load it");
     }
 
-    fn paste_link(&mut self) {
-        let clip = miniquad::window::clipboard_get().unwrap_or_default();
-        let url = clip.trim();
-        if (url.starts_with("https://") || url.starts_with("http://")) && url.len() <= 200 && !url.contains(char::is_whitespace) {
-            self.custom_url = Some(url.to_string());
-            self.toast("QR code now uses the public link");
-        } else {
-            self.toast("Copy a link first, e.g. https://xxxx.trycloudflare.com");
-        }
-    }
 
     /// Sounds, music, confetti and score pop-ups triggered by game changes.
     fn react(&mut self, g: &Game, now: u64) {
@@ -886,10 +881,11 @@ fn window_conf() -> Conf {
 async fn main() {
     let (quiz, quiz_src, quiz_err) = load_quiz();
     let sh = Shared::new(Game::new(quiz));
-    let (lan_url, server_err) = match server::start(sh.clone()) {
-        Ok(port) => (server::lan_ip().map(|ip| format!("http://{ip}:{port}/")), None),
-        Err(e) => (None, Some(e)),
+    let (port, lan_url, server_err) = match server::start(sh.clone()) {
+        Ok(port) => (port, server::lan_ip().map(|ip| format!("http://{ip}:{port}/")), None),
+        Err(e) => (3000, None, Some(e)),
     };
+    prevent_quit(); // so closing the window also stops the online link
 
     // render music and effects off the main thread so the window shows at once
     let (tx, rx) = mpsc::channel();
@@ -915,7 +911,8 @@ async fn main() {
     let mut app = App {
         sh,
         lan_url,
-        custom_url: None,
+        port,
+        tunnel: None,
         server_err,
         qr: None,
         quiz_src,
@@ -1052,21 +1049,29 @@ async fn main() {
                 uy += 30.0;
                 if let Some(e) = &app.server_err {
                     ui.text(&ui.fit(e, jw - 30.0, 14.0, true), cx, uy, 14.0, hex(0xffb4a8), true, 0.5);
-                } else if app.lan_url.is_none() && app.custom_url.is_none() {
-                    ui.text("No network found — connect to Wi-Fi", cx, uy, 14.0, hex(0xffb4a8), true, 0.5);
                 } else {
-                    ui.text("Pick your group & avatar", cx, uy, 15.0, WHITE, false, 0.5);
-                }
-                let by = uy + 18.0;
-                if by + 34.0 < main_bottom {
-                    if app.custom_url.is_some() {
-                        if ui.button("Use Wi-Fi link", PAD + 40.0, by, jw - 80.0, 34.0, false, true) {
-                            ui_cmd = Some("lan");
+                    let tstate = app.tunnel.as_ref().map(|t| t.state());
+                    let (msg, col) = match &tstate {
+                        Some(tunnel::State::Ready(_)) => ("Online link — works on any network".to_string(), WHITE),
+                        Some(tunnel::State::Failed(e)) => (e.clone(), hex(0xffb4a8)),
+                        None if app.lan_url.is_none() => ("No network found — use the online link".into(), hex(0xffb4a8)),
+                        _ => ("Can't join? Phones on other Wi-Fi → Online link".into(), WHITE),
+                    };
+                    ui.text(&ui.fit(&msg, jw - 24.0, 14.0, true), cx, uy, 14.0, col, true, 0.5);
+                    let by = uy + 18.0;
+                    if by + 34.0 < main_bottom {
+                        let (label, enabled, cmd) = match &tstate {
+                            None | Some(tunnel::State::Failed(_)) => ("Online link (Internet)", true, "online"),
+                            Some(tunnel::State::Downloading) => ("Downloading cloudflared…", false, ""),
+                            Some(tunnel::State::Starting) => ("Starting online link…", false, ""),
+                            Some(tunnel::State::Ready(_)) => ("Use Wi-Fi link instead", true, "lan"),
+                        };
+                        if ui.button(label, PAD + 30.0, by, jw - 60.0, 34.0, tstate.is_none(), enabled) {
+                            ui_cmd = Some(cmd);
                         }
-                    } else if ui.button("Paste public link", PAD + 40.0, by, jw - 80.0, 34.0, false, true) {
-                        ui_cmd = Some("paste");
                     }
                 }
+                let by = uy + 18.0;
                 let info = match &app.quiz_err {
                     Some(e) => e.clone(),
                     None => format!("{} questions · {}", g.quiz.total_questions(), app.quiz_src),
@@ -1276,8 +1281,8 @@ async fn main() {
         match ui_cmd {
             Some("mute") => app.muted = !app.muted,
             Some("questions") => app.open_questions_file(),
-            Some("paste") => app.paste_link(),
-            Some("lan") => app.custom_url = None,
+            Some("online") => app.tunnel = Some(tunnel::Tunnel::start(app.port)),
+            Some("lan") => app.tunnel = None,
             _ => {}
         }
         app.apply(acts);
@@ -1294,6 +1299,10 @@ async fn main() {
                 get_screen_data().export_png(&format!("{dir}/final.png"));
                 std::process::exit(0);
             }
+        }
+        if is_quit_requested() {
+            app.tunnel = None; // stops cloudflared
+            break;
         }
         next_frame().await;
     }

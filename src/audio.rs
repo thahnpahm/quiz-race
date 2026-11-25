@@ -1,7 +1,7 @@
 //! Music and sound effects, synthesised in code (no audio files): chiptune-style square lead,
 //! triangle bass and noise drums, rendered once at startup to 16-bit WAV bytes.
 
-pub const SR: u32 = 22050;
+pub const SR: u32 = 44100; // the mixer runs at 44.1 kHz; other rates get a crude resample
 
 fn freq(midi: i32) -> f32 {
     440.0 * 2f32.powf((midi - 69) as f32 / 12.0)

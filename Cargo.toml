@@ -1,11 +1,11 @@
 [package]
 name = "quiz-race"
-version = "2.0.0"
+version = "2.1.0"
 edition = "2021"
 description = "Midterm Showdown – class quiz race: host screen + built-in LAN server"
 
 [dependencies]
-macroquad = "0.4.14"
+macroquad = { version = "0.4.14", features = ["audio"] }
 tiny_http = "0.12"
 qrcodegen = "1.8"
 serde = { version = "1", features = ["derive"] }
