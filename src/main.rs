@@ -21,6 +21,42 @@ use std::sync::{mpsc, Arc};
 const FONT: &[u8] = include_bytes!("../assets/BeVietnamPro-SemiBold.ttf");
 const FONT_BOLD: &[u8] = include_bytes!("../assets/BeVietnamPro-Bold.ttf");
 const BASE_W: f32 = 1280.0;
+/// Text is rasterised only at these sizes (then scaled to the exact size asked for).
+const SNAP_SIZES: [f32; 12] = [12.0, 14.0, 16.0, 18.0, 20.0, 22.0, 24.0, 26.0, 30.0, 34.0, 40.0, 46.0];
+const COUNTDOWN_SIZE: f32 = 120.0;
+
+fn snap(size: f32) -> f32 {
+    SNAP_SIZES.iter().copied().find(|&s| s >= size - 0.5).unwrap_or(size.round())
+}
+
+fn raster(size: f32, px: f32) -> u16 {
+    (size * px).round().max(1.0) as u16
+}
+
+/// Every character the game can show: ASCII, punctuation and everything in the questions file.
+fn quiz_chars(quiz: &Quiz) -> Vec<char> {
+    let mut chars: Vec<char> = (' '..='~').chain("·—–…×’‘“”".chars()).collect();
+    let texts = [quiz.title.as_str(), quiz.subtitle.as_str()].into_iter().chain(
+        quiz.parts.iter().flat_map(|p| std::iter::once(p.title.as_str()).chain(p.questions.iter().flat_map(|q| std::iter::once(q.q.as_str()).chain(q.options.iter().map(|o| o.as_str()))))),
+    );
+    chars.extend(texts.flat_map(|t| t.chars()));
+    chars.sort_unstable();
+    chars.dedup();
+    chars
+}
+
+/// One font object per (weight, pixel size), with its glyphs rendered up front.
+/// macroquad keeps one glyph atlas per font and its atlas can blow up (black boxes, or a
+/// crash) when it has to grow mid-game with mixed sizes; one small atlas per size avoids that.
+fn make_font(bold: bool, raster_px: u16, chars: &[char]) -> Font {
+    let f = load_ttf_font_from_bytes(if bold { FONT_BOLD } else { FONT }).unwrap();
+    if raster_px > 100 {
+        f.populate_font_cache(&('0'..='9').collect::<Vec<_>>(), raster_px); // countdown
+    } else {
+        f.populate_font_cache(chars, raster_px);
+    }
+    f
+}
 const BASE_H: f32 = 720.0;
 const PAD: f32 = 22.0;
 
@@ -97,8 +133,8 @@ struct Ui {
     px: f32,
     vw: f32,
     vh: f32,
-    font: Font,
-    bold: Font,
+    fonts: std::cell::RefCell<HashMap<(bool, u16), Font>>,
+    chars: Vec<char>,
     emoji: HashMap<&'static str, Texture2D>,
     alpha: f32,
     mouse: Vec2,
@@ -152,20 +188,15 @@ impl Ui {
     fn circle(&self, x: f32, y: f32, r: f32, c: Color) {
         draw_circle(x, y, r, self.c(c));
     }
-    fn tp(&self, size: f32, bold: bool, c: Color) -> TextParams<'_> {
-        // glyphs are cached per pixel size: keep the set of sizes small (no animated sizes)
-        let font_size = (size * self.px).round().max(1.0);
-        TextParams {
-            font: Some(if bold { &self.bold } else { &self.font }),
-            font_size: font_size as u16,
-            font_scale: size / font_size,
-            color: self.c(c),
-            ..Default::default()
-        }
+    /// Font for this size: (font, raster pixel size, scale that gives exactly `size`).
+    fn font(&self, size: f32, bold: bool) -> (Font, u16, f32) {
+        let r = raster(snap(size), self.px);
+        let f = self.fonts.borrow_mut().entry((bold, r)).or_insert_with(|| make_font(bold, r, &self.chars)).clone();
+        (f, r, size / r as f32)
     }
     fn tw(&self, t: &str, size: f32, bold: bool) -> f32 {
-        let p = self.tp(size, bold, WHITE);
-        measure_text(t, p.font, p.font_size, p.font_scale).width
+        let (f, r, sc) = self.font(size, bold);
+        measure_text(t, Some(&f), r, sc).width
     }
     /// Text vertically centred on `cy`; `align` 0 = left, 0.5 = centre, 1 = right of `x`.
     fn text(&self, t: &str, x: f32, cy: f32, size: f32, c: Color, bold: bool, align: f32) {
@@ -174,8 +205,8 @@ impl Ui {
     /// Text drawn `zoom` times bigger without rasterising a new font size (for animations).
     #[allow(clippy::too_many_arguments)]
     fn text_zoom(&self, t: &str, x: f32, cy: f32, size: f32, zoom: f32, c: Color, bold: bool, align: f32) {
-        let mut p = self.tp(size, bold, c);
-        p.font_scale *= zoom;
+        let (f, r, sc) = self.font(size, bold);
+        let p = TextParams { font: Some(&f), font_size: r, font_scale: sc * zoom, color: self.c(c), ..Default::default() };
         let w = if align > 0.0 { measure_text(t, p.font, p.font_size, p.font_scale).width } else { 0.0 };
         draw_text_ex(t, x - w * align, cy + size * zoom * 0.36, p);
     }
@@ -285,6 +316,7 @@ struct App {
     lan_url: Option<String>,
     port: u16,
     tunnel: Option<tunnel::Tunnel>,
+    reload_fonts: bool,
     server_err: Option<String>,
     qr: Option<(String, QrCode)>,
     quiz_src: String,
@@ -354,6 +386,7 @@ impl App {
                     self.quiz_src = src;
                     self.quiz_err = err;
                     self.sh.with(|g, _| g.reset(Some(q)));
+                    self.reload_fonts = true; // the new questions may use new characters
                     self.lanes.clear();
                     self.toast("Game reset — scores cleared, questions reloaded");
                 }
@@ -834,20 +867,38 @@ fn draw_podium(ui: &Ui, g: &Game, rows: &[Ranked], cx: f32, base: f32, since: f3
     }
 }
 
-/// Debug screenshots: nine teams with scores, part 1 results on screen.
+/// Debug soak run (QUIZ_RACE_SHOT=<dir>): plays a whole game with nine fake teams, one step
+/// every 0.9 s, saving a screenshot before each step. Returns a window size to switch to.
 #[cfg(debug_assertions)]
-fn demo_state(g: &mut Game) {
-    for (i, id) in g.quiz.teams.clone().into_iter().enumerate() {
-        let tok = format!("demoToken{id}");
-        g.join(&tok, id, emoji_list::AVATARS[i * 3 % emoji_list::AVATARS.len()]).unwrap();
-        let t = g.teams.get_mut(&id).unwrap();
-        for p in 0..3 {
-            t.scores[p] = (4700 - (i as u32 * 397 + p as u32 * 211) % 3900) as u32;
-            t.correct[p] = 5 - (i as u32 + p as u32) % 4;
-            t.time[p] = 30_000 + i as u64 * 1_700;
+fn soak_step(g: &mut Game, now: u64, step: usize) -> Option<(f32, f32)> {
+    if step == 1 {
+        for (i, id) in g.quiz.teams.clone().into_iter().enumerate() {
+            let tok = format!("demoToken{id}");
+            g.join(&tok, id, emoji_list::AVATARS[i * 3 % emoji_list::AVATARS.len()]).unwrap();
+            g.connect(&tok);
         }
+        return None;
     }
-    g.phase = Phase::Results;
+    match g.phase {
+        Phase::Waiting => {
+            g.start(now);
+            return match g.part {
+                1 => Some((1500.0, 860.0)),
+                2 => Some((1050.0, 620.0)),
+                _ => None,
+            };
+        }
+        Phase::Question => {
+            let n = g.question().options.len();
+            for (i, id) in g.quiz.teams.clone().into_iter().enumerate() {
+                g.answer(&format!("demoToken{id}"), (i + g.qi) % n, now);
+            }
+            g.skip(now);
+        }
+        Phase::Reveal | Phase::Results => g.next(now),
+        Phase::Countdown | Phase::Final => {}
+    }
+    None
 }
 
 // ---------- main ----------
@@ -896,23 +947,20 @@ async fn main() {
         let _ = tx.send(v);
     });
 
-    let font = load_ttf_font_from_bytes(FONT).unwrap();
-    let bold = load_ttf_font_from_bytes(FONT_BOLD).unwrap();
     let emoji: HashMap<&'static str, Texture2D> =
         emoji_list::EMOJI.iter().map(|(e, png)| (*e, Texture2D::from_file_with_format(png, Some(ImageFormat::Png)))).collect();
 
     #[cfg(debug_assertions)]
     let shot_dir = std::env::var("QUIZ_RACE_SHOT").ok();
     #[cfg(debug_assertions)]
-    if shot_dir.is_some() {
-        demo_state(&mut sh.game.lock().unwrap());
-    }
+    let (mut soak_step_n, mut soak_t) = (0usize, 1.5f32);
     let start_phase = sh.game.lock().unwrap().phase;
     let mut app = App {
         sh,
         lan_url,
         port,
         tunnel: None,
+        reload_fonts: false,
         server_err,
         qr: None,
         quiz_src,
@@ -934,7 +982,9 @@ async fn main() {
         toast: None,
         th: theme(None),
     };
-    let mut ui = Ui { s: 1.0, px: 1.0, vw: BASE_W, vh: BASE_H, font, bold, emoji, alpha: 1.0, mouse: Vec2::ZERO, click: false, th: app.th, t: 0.0, oy: 0.0 };
+    let chars = quiz_chars(&app.sh.game.lock().unwrap().quiz);
+    let mut px_pending: Option<(f32, f32)> = None;
+    let mut ui = Ui { s: 1.0, px: 0.0, vw: BASE_W, vh: BASE_H, fonts: Default::default(), chars, emoji, alpha: 1.0, mouse: Vec2::ZERO, click: false, th: app.th, t: 0.0, oy: 0.0 };
 
     loop {
         // sounds ready?
@@ -967,11 +1017,26 @@ async fn main() {
         let s = app.scale();
         ui.s = s;
         let px = ((s * screen_dpi_scale()) * 8.0).round() / 8.0;
+        // new pixel scale: rebuild fonts once the window has stopped changing size (meanwhile
+        // the old ones are scaled); new questions: rebuild now, they may bring new characters
         if px != ui.px {
-            // new pixel scale (window resized): fresh fonts drop the glyphs cached at old sizes
-            ui.px = px;
-            ui.font = load_ttf_font_from_bytes(FONT).unwrap();
-            ui.bold = load_ttf_font_from_bytes(FONT_BOLD).unwrap();
+            match px_pending {
+                Some((p, since)) if p == px && (t - since > 0.3 || ui.px == 0.0) => {
+                    ui.px = px;
+                    ui.fonts.borrow_mut().clear();
+                    px_pending = None;
+                }
+                Some((p, _)) if p == px => {}
+                _ => px_pending = Some((px, if ui.px == 0.0 { -1.0 } else { t })),
+            }
+            if ui.px == 0.0 {
+                ui.px = px;
+            }
+        }
+        if app.reload_fonts {
+            app.reload_fonts = false;
+            ui.chars = quiz_chars(&app.sh.game.lock().unwrap().quiz);
+            ui.fonts.borrow_mut().clear();
         }
         ui.vw = screen_width() / s;
         ui.vh = screen_height() / s;
@@ -1110,8 +1175,8 @@ async fn main() {
                 let frac = (left % 1000) as f32 / 1000.0;
                 ui.emo(pt(g.part).emoji, ui.vw / 2.0 - 260.0, top + mh / 2.0, 120.0);
                 ui.text(&cap(g.part), ui.vw / 2.0 + 40.0, top + mh * 0.28, 44.0, WHITE, true, 0.5);
-                let size = (mh * 0.5).min(180.0).round();
-                ui.text_zoom(&n.to_string(), ui.vw / 2.0 + 40.0, top + mh * 0.65, size, 1.0 + 0.25 * frac, ui.th.accent, true, 0.5);
+                let zoom = (mh * 0.5).min(180.0) / COUNTDOWN_SIZE * (1.0 + 0.25 * frac);
+                ui.text_zoom(&n.to_string(), ui.vw / 2.0 + 40.0, top + mh * 0.65, COUNTDOWN_SIZE, zoom, ui.th.accent, true, 0.5);
             }
             Phase::Question | Phase::Reveal => draw_question(&ui, &g, now, PAD, top, w, mh, since),
             Phase::Results => {
@@ -1289,15 +1354,16 @@ async fn main() {
         // debug builds only: QUIZ_RACE_SHOT=<dir> saves the results and final screens, then quits
         #[cfg(debug_assertions)]
         if let Some(dir) = &shot_dir {
-            if t > 3.0 && app.screen.0 == Phase::Results {
-                get_screen_data().export_png(&format!("{dir}/results.png"));
-                app.sh.with(|g, _| {
-                    g.phase = Phase::Final;
-                    g.version += 1;
-                });
-            } else if t > 7.0 && app.screen.0 == Phase::Final {
-                get_screen_data().export_png(&format!("{dir}/final.png"));
-                std::process::exit(0);
+            if t >= soak_t {
+                soak_t = t + 0.9;
+                get_screen_data().export_png(&format!("{dir}/soak{soak_step_n:03}.png"));
+                if app.screen.0 == Phase::Final && soak_step_n > 5 {
+                    std::process::exit(0);
+                }
+                soak_step_n += 1;
+                if let Some((w, h)) = app.sh.with(|g, now| soak_step(g, now, soak_step_n)) {
+                    request_new_screen_size(w, h);
+                }
             }
         }
         if is_quit_requested() {
