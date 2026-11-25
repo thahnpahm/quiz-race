@@ -1363,7 +1363,7 @@ async fn main() {
                 ui_cmd = Some("questions");
             }
             fx += 172.0;
-            let (label, cmd) = if app.own_music { ("Own music ×", "music-off") } else { ("Music…", "music") };
+            let (label, cmd) = if app.own_music { ("Default music", "music-off") } else { ("Music…", "music") };
             if ui.button(label, fx, fy, 130.0, 44.0, false, true) {
                 ui_cmd = Some(cmd);
             }

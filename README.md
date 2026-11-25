@@ -15,7 +15,7 @@ Space hoặc Enter là nút chính (Start → End question → Next…). M bật
 Nút **Auto-advance** bật/tắt tự chuyển câu. Bấm ✕ trên ô nhóm hai lần để xoá nhóm. Bấm **Reset game** hai lần để xoá điểm (các nhóm vẫn ở lại).
 
 ## Nhạc riêng
-Trong lobby bấm **Music…** rồi chọn một file nhạc trên máy (mp3, m4a, aac, ogg, flac, wav). App chép file vào `%APPDATA%\Quiz Race\music.<đuôi>` và phát suốt ván, nhỏ hơn một chút lúc học sinh làm bài; bài dài hơn 4 phút thì chỉ giữ 4 phút đầu. Bấm **Own music ×** để quay về nhạc có sẵn. File nhạc chỉ nằm trên máy bạn, không nằm trong bộ cài hay mã nguồn.
+Trong lobby bấm **Music…** rồi chọn một file nhạc trên máy (mp3, m4a, aac, ogg, flac, wav). App chép file vào `%APPDATA%\Quiz Race\music.<đuôi>` và phát suốt ván, nhỏ hơn một chút lúc học sinh làm bài; bài dài hơn 4 phút thì chỉ giữ 4 phút đầu. Bấm **Default music** để quay về nhạc có sẵn. Nếu đổi loa/tai nghe khi game đang mở, hãy mở lại game để tiếng ra đúng thiết bị. File nhạc chỉ nằm trên máy bạn, không nằm trong bộ cài hay mã nguồn.
 
 ## Đổi câu hỏi
 Trong lobby bấm **Questions file…**: app tạo `%APPDATA%\Quiz Race\questions.json` (bản sao bộ câu hỏi gốc) và mở thư mục chứa nó.
