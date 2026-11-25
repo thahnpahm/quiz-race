@@ -3,6 +3,7 @@ name = "quiz-race"
 version = "2.4.0"
 edition = "2021"
 description = "Midterm Showdown – class quiz race: host screen + built-in LAN server"
+license = "MIT"
 
 [dependencies]
 macroquad = { version = "0.4.14", features = ["audio"] }

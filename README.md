@@ -59,3 +59,6 @@ iscc /DAppVersion=2.0.0 installer\QuizRace.iss
 - Font: [Be Vietnam Pro](https://github.com/bettergui/BeVietnamPro), SIL Open Font License (`assets/OFL-BeVietnamPro.txt`).
 - Câu hỏi: từ bản gốc (Midterm Review – Organizational Psychology in Business).
 - Âm thanh: [quad-snd](https://github.com/not-fl3/quad-snd) 0.2.8 (MIT/Apache-2.0), bản sửa trong `vendor/quad-snd` để tự chuyển sang thiết bị phát mới.
+
+## Giấy phép
+Mã nguồn: MIT (`LICENSE`). Emoji, font và `vendor/quad-snd` theo giấy phép riêng ghi ở phần Ghi công.
